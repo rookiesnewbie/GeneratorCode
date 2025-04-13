@@ -1,3 +1,21 @@
+-- 创建数据库表
+CREATE TABLE `financial_reports` (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `region_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '区域名称（如：亚太区、欧洲区）',
+  `office_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '办事处名称',
+  `country_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '国家名称',
+  `report_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '报告名称',
+  `amount_rmb` decimal(15,2) NOT NULL COMMENT '金额（人民币，单位：元）',
+  `years` char(4) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '年份（格式：YYYY，如2023）',
+  `months` char(2) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '月份（格式：MM，如01代表1月）',
+  `category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '分类（如：收入、支出、预算）',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+  PRIMARY KEY (`id`),
+  KEY `index_report` (`category`,`region_name`,`years`,`months`) USING BTREE
+) ENGINE=InnoDB AUTO_INCREMENT=1000001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='财务报告数据表';
+
+-- 创建存储过程
 DELIMITER $$
 
 CREATE PROCEDURE generate_data()
