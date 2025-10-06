@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>中国地图 - ECharts</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+
+<body>
+    <div id="map" style="width: 900px; height: 600px;"></div>
+    <script>
+        // 初始化 ECharts 实例
+        var myChart = echarts.init(document.getElementById('map'));
+        
+        // 显示加载动画
+        myChart.showLoading();
+        
+        // 获取地图数据函数
+        async function getMapData() {
+            try {
+                const response = await fetch('https://geojson.cn/api/china/china.json');
+                return await response.json();
+            } catch (error) {
+                console.error('获取地图数据失败：', error);
+                throw error;
+            }
+        }
+
+        // 初始化地图配置
+        function initMapOption() {
+            return {
+                title: {
+                    text: '中国地图示例',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{b} 注册用户: {c} 人'
+                },
+                visualMap: {
+                    min: 0,
+                    max: 1000,
+                    left: 'left',
+                    top: 'bottom',
+                    text: ['高', '低'],
+                    calculable: true,
+                    inRange: {
+                        color: [
+                            '#313695',
+                            '#4575b4',
+                            '#74add1',
+                            '#abd9e9',
+                            '#e0f3f8',
+                            '#ffffbf',
+                            '#fee090',
+                            '#fdae61',
+                            '#f46d43',
+                            '#d73027',
+                            '#a50026'
+                        ]
+                    }
+                },
+                series: [{
+                    name: '中国',
+                    type: 'map',
+                    map: 'china',
+                    roam: true,
+                    emphasis: {
+                        label: {
+                            show: true
+                        }
+                    },
+                    data: [
+                        { name: '北京市', value: 500 },
+                        { name: '上海市', value: 800 },
+                        { name: '广东省', value: 900 },
+                        { name: '四川省', value: 600 }
+                    ]
+                }]
+            };
+        }
+
+        // 初始化地图
+        async function initMap() {
+            try {
+                const mapData = await getMapData();
+                echarts.registerMap('china', mapData);
+                const option = initMapOption();
+                myChart.setOption(option);
+            } catch (error) {
+                console.error('初始化地图失败：', error);
+            } finally {
+                myChart.hideLoading();
+            }
+        }
+
+        // 执行初始化
+        initMap();
+    </script>
+</body>
+
+</html>
