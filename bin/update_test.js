@@ -58,26 +58,32 @@ function processDataOptimized(data) {
     areaTotal.ytd += value;
   });
   
-  // 合并结果并处理0值
+  // 合并结果并处理四舍五入和0值
   const result = [];
   
-  // 添加分组数据
+  // 处理分组数据
   for (const group of groups.values()) {
-    // 处理0值为空
+    // 四舍五入并处理0值为空
     monthKeys.forEach(month => {
+      group[month] = Math.round(group[month]);
       if (group[month] === 0) group[month] = '';
     });
+    
+    group.ytd = Math.round(group.ytd);
     if (group.ytd === 0) group.ytd = '';
     
     result.push(group);
   }
   
-  // 添加合计数据
+  // 处理合计数据
   for (const total of areaTotals.values()) {
-    // 处理0值为空
+    // 四舍五入并处理0值为空
     monthKeys.forEach(month => {
+      total[month] = Math.round(total[month]);
       if (total[month] === 0) total[month] = '';
     });
+    
+    total.ytd = Math.round(total.ytd);
     if (total.ytd === 0) total.ytd = '';
     
     result.push(total);
@@ -86,28 +92,26 @@ function processDataOptimized(data) {
   return result;
 }
 
-// 测试数据
-const testData = [
-  { area: "亚太地区部", month: "01", service_name: "减值", value: 5 },
-  { area: "亚太地区部", month: "02", service_name: "减值", value: 6 },
-  { area: "亚太地区部", month: "03", service_name: "减值", value: 7 },
-  { area: "亚太地区部", month: "04", service_name: "减值", value: 8 },
-  { area: "亚太地区部", month: "05", service_name: "减值", value: 9 },
-  { area: "亚太地区部", month: "06", service_name: "减值", value: 10 },
-  { area: "亚太地区部", month: "07", service_name: "减值", value: 51 },
-  { area: "亚太地区部", month: "08", service_name: "减值", value: -5 },
-  { area: "亚太地区部", month: "09", service_name: "减值", value: -15 },
-  { area: "亚太地区部", month: "10", service_name: "减值", value: 25 },
-  { area: "亚太地区部", month: "11", service_name: "减值", value: 25 },
-  { area: "亚太地区部", month: "12", service_name: "减值", value: 125 },
-  // 测试其他service_name的数据
-  { area: "亚太地区部", month: "01", service_name: "报废", value: 10 },
-  { area: "亚太地区部", month: "02", service_name: "运输", value: 20 },
-  { area: "欧洲地区部", month: "01", service_name: "减值", value: 15 },
-  { area: "欧洲地区部", month: "01", service_name: "机关结算成本", value: 15 },
-  { area: "欧洲地区部", month: "02", service_name: "机关存货成本", value: 15 },
+// 测试包含小数的数据
+const testDataWithDecimals = [
+  { area: "亚太地区部", month: "01", service_name: "减值", value: 5.3 },
+  { area: "亚太地区部", month: "02", service_name: "减值", value: 6.7 },
+  { area: "亚太地区部", month: "03", service_name: "减值", value: 7.1 },
+  { area: "亚太地区部", month: "04", service_name: "减值", value: 8.9 },
+  { area: "亚太地区部", month: "05", service_name: "减值", value: 9.4 },
+  { area: "亚太地区部", month: "06", service_name: "减值", value: 10.6 },
+  { area: "亚太地区部", month: "07", service_name: "减值", value: 51.2 },
+  { area: "亚太地区部", month: "08", service_name: "减值", value: -5.8 },
+  { area: "亚太地区部", month: "09", service_name: "减值", value: -15.3 },
+  { area: "亚太地区部", month: "10", service_name: "减值", value: 25.7 },
+  { area: "亚太地区部", month: "11", service_name: "减值", value: 25.1 },
+  { area: "亚太地区部", month: "12", service_name: "减值", value: 125.9 },
+  { area: "亚太地区部", month: "01", service_name: "报废", value: 10.5 },
+  { area: "亚太地区部", month: "02", service_name: "运输", value: 0.4 }, // 四舍五入后会变成0
+  { area: "欧洲地区部", month: "01", service_name: "减值", value: 15.6 },
+    { area: "欧洲地区部", month: "01", service_name: "机关结算成本", value: 15.3 },
+  { area: "欧洲地区部", month: "01", service_name: "机关存货成本", value: 15.1 },
 ];
 
-// 运行处理
-const processedData = processDataOptimized(testData);
+const processedData = processDataOptimized(testDataWithDecimals);
 console.log(JSON.stringify(processedData, null, 2));
