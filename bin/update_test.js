@@ -1,3 +1,9 @@
+/**
+ * 按区域和服务处理数据，按月分解
+ * @param {Array} data - 包含区域、月份、服务名称和值的原始数据数组
+ * @param {string} batchId - 批次标识符，格式为 'YYYY-MM'
+ * @returns {Array} - 处理和聚合后的数据
+ */
 function processDataOptimized(data, batchId) {
     // 预定义月份映射
     const monthMap = {
@@ -5,15 +11,9 @@ function processDataOptimized(data, batchId) {
         '07': '7月', '08': '8月', '09': '9月', '10': '10月', '11': '11月', '12': '12月'
     };
 
-    // 创建反向映射
-    const reverseMonthMap = {};
-    Object.keys(monthMap).forEach(key => {
-        reverseMonthMap[monthMap[key]] = key;
-    });
-
     const monthKeys = Object.values(monthMap);
 
-    // 预定义标准化的 service_name 映射
+    // 服务名称标准化映射
     const serviceNameMap = {
         '机关结算成本': '机关结算',
         '机关存货成本': '机关结算'
@@ -22,117 +22,126 @@ function processDataOptimized(data, batchId) {
     const validServices = new Set(['减值', '报废', '好坏件价差', '运输', '仓储', '机关结算']);
 
     // 解析 batchId 获取年份和月份
-    const [batchYear, batchMonth] = batchId.split('-').map(Number);
+    const [, batchMonth] = batchId.split('-').map(Number);
 
-    // 使用 Map 提高分组性能
+    // 初始化用于分组的数据结构
     const groups = new Map();
     const areaTotals = new Map();
 
     // 单次遍历处理所有数据
     data.forEach(item => {
-        // 标准化 service_name
-        let serviceName = serviceNameMap[item.service_name] || item.service_name;
-        if (!validServices.has(serviceName)) {
-            serviceName = '其他';
-        }
-
-        // 获取月份键
+        // 标准化服务名称
+        const serviceName = normalizeServiceName(item.service_name, serviceNameMap, validServices);
+        
+        // 获取月份键和值
         const monthKey = monthMap[item.month];
         const value = item.value;
 
-        // 分组键
+        // 创建分组键
         const groupKey = `${item.area}|${serviceName}`;
 
         // 处理分组数据
         if (!groups.has(groupKey)) {
-            // 初始化分组对象，所有月份初始化为0
-            const group = { area: item.area, service_name: serviceName, ytd: 0 };
-            monthKeys.forEach(key => group[key] = 0);
-            groups.set(groupKey, group);
+            groups.set(groupKey, createInitialGroup(item.area, serviceName, monthKeys));
         }
 
         const group = groups.get(groupKey);
-        group[monthKey] += value;
-        group.ytd += value;
+        updateGroupValues(group, monthKey, value);
 
-        // 同时处理区域合计
+        // 处理区域总计
         if (!areaTotals.has(item.area)) {
-            const total = { area: item.area, service_name: '合计', ytd: 0 };
-            monthKeys.forEach(key => total[key] = 0);
-            areaTotals.set(item.area, total);
+            areaTotals.set(item.area, createInitialGroup(item.area, '合计', monthKeys));
         }
 
         const areaTotal = areaTotals.get(item.area);
-        areaTotal[monthKey] += value;
-        areaTotal.ytd += value;
+        updateGroupValues(areaTotal, monthKey, value);
     });
 
-    // 合并结果并处理四舍五入和0值
+    // 处理结果（四舍五入和零值处理）
     const result = [];
-
-    // 处理分组数据
+    
+    // 处理分组
     for (const group of groups.values()) {
-        // 四舍五入
-        monthKeys.forEach(month => {
-            group[month] = Math.round(group[month]);
-        });
-
-        group.ytd = Math.round(group.ytd);
-
-        // 根据batchId动态设置零值显示
-        monthKeys.forEach(month => {
-            if (group[month] === 0) {
-                const monthNum = parseInt(reverseMonthMap[month]);
-                if (monthNum <= batchMonth) {
-                    // 1到batchMonth月显示为0
-                    group[month] = 0;
-                } else {
-                    // batchMonth+1到12月显示为'/'
-                    group[month] = '/';
-                }
-            }
-        });
-
-        // 处理ytd字段
-        if (group.ytd === 0) {
-            group.ytd = 0; // ytd始终显示为0
-        }
-
+        processGroupResult(group, monthKeys, batchMonth, monthMap);
         result.push(group);
     }
 
-    // 处理合计数据
+    // 处理区域总计
     for (const total of areaTotals.values()) {
-        // 四舍五入
-        monthKeys.forEach(month => {
-            total[month] = Math.round(total[month]);
-        });
-
-        total.ytd = Math.round(total.ytd);
-
-        // 根据batchId动态设置零值显示
-        monthKeys.forEach(month => {
-            if (total[month] === 0) {
-                const monthNum = parseInt(reverseMonthMap[month]);
-                if (monthNum <= batchMonth) {
-                    // 1到batchMonth月显示为0
-                    total[month] = 0;
-                } else {
-                    // batchMonth+1到12月显示为'/'
-                    total[month] = '/';
-                }
-            }
-        });
-
-        // 处理ytd字段
-        if (total.ytd === 0) {
-            total.ytd = 0; // ytd始终显示为0
-        }
-
+        processGroupResult(total, monthKeys, batchMonth, monthMap);
         result.push(total);
     }
 
     return result;
+}
+
+/**
+ * 根据映射和验证规则标准化服务名称
+ * @param {string} serviceName - 原始服务名称
+ * @param {Object} serviceNameMap - 服务名称标准化映射
+ * @param {Set} validServices - 有效服务名称集合
+ * @returns {string} - 标准化后的服务名称
+ */
+function normalizeServiceName(serviceName, serviceNameMap, validServices) {
+    const normalized = serviceNameMap[serviceName] || serviceName;
+    return validServices.has(normalized) ? normalized : '其他';
+}
+
+/**
+ * 创建初始分组对象，所有月份初始化为 0
+ * @param {string} area - 区域名称
+ * @param {string} serviceName - 服务名称
+ * @param {Array} monthKeys - 月份键数组
+ * @returns {Object} - 初始分组对象
+ */
+function createInitialGroup(area, serviceName, monthKeys) {
+    const group = { area, service_name: serviceName, ytd: 0 };
+    monthKeys.forEach(key => group[key] = 0);
+    return group;
+}
+
+/**
+ * 更新分组的月份和年度累计值
+ * @param {Object} group - 要更新的分组对象
+ * @param {string} monthKey - 月份键
+ * @param {number} value - 要添加的值
+ */
+function updateGroupValues(group, monthKey, value) {
+    group[monthKey] += value;
+    group.ytd += value;
+}
+
+/**
+ * 处理分组结果，包括四舍五入和零值处理
+ * @param {Object} group - 要处理的分组对象
+ * @param {Array} monthKeys - 月份键数组
+ * @param {number} batchMonth - 批次月份数字
+ * @param {Object} monthMap - 月份映射对象
+ */
+function processGroupResult(group, monthKeys, batchMonth, monthMap) {
+    // 四舍五入数值
+    monthKeys.forEach(month => {
+        group[month] = Math.round(group[month]);
+    });
+    group.ytd = Math.round(group.ytd);
+
+    // 根据批次月份处理零值
+    const reverseMonthMap = {};
+    Object.keys(monthMap).forEach(key => {
+        reverseMonthMap[monthMap[key]] = key;
+    });
+
+    monthKeys.forEach(month => {
+        if (group[month] === 0) {
+            const monthNum = parseInt(reverseMonthMap[month]);
+            group[month] = monthNum <= batchMonth ? 0 : '/';
+        }
+    });
+
+    // 确保年度累计值为零时显示 0
+    if (group.ytd === 0) {
+        group.ytd = 0;
+    }
 }
 
 // 测试包含小数的数据
