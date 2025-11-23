@@ -4,7 +4,7 @@
  * @param {string} batchId - 批次标识符，格式为 'YYYY-MM'
  * @returns {Array} - 处理和聚合后的数据
  */
-function processDataOptimized(data, batchId) {
+function processData(data, batchId) {
     // 预定义月份映射
     const monthMap = {
         '01': '1月', '02': '2月', '03': '3月', '04': '4月', '05': '5月', '06': '6月',
@@ -61,16 +61,16 @@ function processDataOptimized(data, batchId) {
     const result = [];
     
     // 处理分组
-    for (const group of groups.values()) {
-        processGroupResult(group, monthKeys, batchMonth, monthMap);
-        result.push(group);
-    }
+    groups.forEach((group) => {
+      processGroupResult(group, monthKeys, batchMonth, monthMap);
+      result.push(group);
+    });
 
     // 处理区域总计
-    for (const total of areaTotals.values()) {
-        processGroupResult(total, monthKeys, batchMonth, monthMap);
-        result.push(total);
-    }
+    areaTotals.forEach((total) => {
+      processGroupResult(total, monthKeys, batchMonth, monthMap);
+      result.push(total);
+    });
 
     return result;
 }
@@ -143,7 +143,6 @@ function processGroupResult(group, monthKeys, batchMonth, monthMap) {
         group.ytd = 0;
     }
 }
-
 // 测试包含小数的数据
 const testDataWithDecimals = [
   { area: "亚太地区部", month: "01", service_name: "减值", value: 5.3 },
