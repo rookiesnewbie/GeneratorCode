@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据可视化大屏</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a1a2f;
+      font-family: "Microsoft YaHei", sans-serif;
+    }
+
+    /* ===== 缩放容器：铺满视口，负责居中 ===== */
+    #screen-wrapper {
+      position: fixed;
+      inset: 0;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* 背景色延伸，避免缩放后出现黑边突兀 */
+      background: radial-gradient(circle at 50% 50%, #0d2547 0%, #06101f 100%);
+    }
+
+    /* ===== 设计稿容器：固定 1920×1080，通过 scale 缩放 ===== */
+    #screen {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      transform-origin: center center;
+      /* scale 由 JS 动态设置 */
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'%3E%3C/svg%3E");
+      background-color: transparent;
+      display: grid;
+      grid-template-rows: 100px 1fr;
+      grid-template-columns: 480px 1fr 480px;
+      grid-template-areas:
+        "header header header"
+        "left   center right";
+      gap: 20px;
+      padding: 20px;
+    }
+
+    /* ===== 顶部标题 ===== */
+    .header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: linear-gradient(90deg, transparent, rgba(0, 180, 255, 0.15), transparent);
+      border-bottom: 1px solid rgba(0, 180, 255, 0.3);
+    }
+
+    .header h1 {
+      font-size: 42px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      color: #fff;
+      text-shadow: 0 0 20px rgba(0, 200, 255, 0.8);
+      background: linear-gradient(180deg, #fff 30%, #4fc3f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header .time {
+      position: absolute;
+      right: 20px;
+      font-size: 20px;
+      color: #7ec8f0;
+    }
+
+    /* ===== 通用面板样式 ===== */
+    .panel {
+      background: rgba(10, 40, 80, 0.5);
+      border: 1px solid rgba(0, 180, 255, 0.25);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(4px);
+    }
+
+    /* 面板四角装饰 */
+    .panel::before,
+    .panel::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-color: #00d4ff;
+      border-style: solid;
+    }
+
+    .panel::before {
+      top: 0;
+      left: 0;
+      border-width: 2px 0 0 2px;
+    }
+
+    .panel::after {
+      bottom: 0;
+      right: 0;
+      border-width: 0 2px 2px 0;
+    }
+
+    .panel-title {
+      font-size: 22px;
+      color: #4fc3f7;
+      margin-bottom: 12px;
+      padding-left: 12px;
+      position: relative;
+    }
+
+    .panel-title::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 4px;
+      height: 20px;
+      background: #00d4ff;
+      border-radius: 2px;
+    }
+
+    /* ===== 三栏区域 ===== */
+    .left-col {
+      grid-area: left;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .center-col {
+      grid-area: center;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .right-col {
+      grid-area: right;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .left-col .panel {
+      flex: 1;
+    }
+
+    .right-col .panel {
+      flex: 1;
+    }
+
+    /* ===== 核心数据卡片 ===== */
+    .kpi-row {
+      display: flex;
+      gap: 20px;
+      flex: 0 0 auto;
+    }
+
+    .kpi {
+      flex: 1;
+      text-align: center;
+      padding: 20px 0;
+      background: linear-gradient(180deg, rgba(0, 180, 255, 0.15), transparent);
+      border-radius: 8px;
+      border: 1px solid rgba(0, 180, 255, 0.2);
+    }
+
+    .kpi .num {
+      font-size: 40px;
+      font-weight: 700;
+      color: #00e5ff;
+      text-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
+      font-family: "DIN", "Arial", sans-serif;
+    }
+
+    .kpi .label {
+      font-size: 16px;
+      color: #8ab4d8;
+      margin-top: 8px;
+    }
+
+    /* ===== 主图表区 ===== */
+    .main-chart {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* 模拟图表：圆环 */
+    .ring {
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: conic-gradient(#00e5ff 0deg 250deg,
+          #0077b6 250deg 360deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 0 60px rgba(0, 229, 255, 0.3);
+    }
+
+    .ring::after {
+      content: "";
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: #0a1a2f;
+    }
+
+    .ring-text {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+    }
+
+    .ring-text .big {
+      font-size: 56px;
+      color: #00e5ff;
+      font-weight: 700;
+    }
+
+    .ring-text .small {
+      font-size: 18px;
+      color: #8ab4d8;
+    }
+
+    /* ===== 模拟柱状图 ===== */
+    .bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-around;
+      height: 100%;
+      padding-top: 20px;
+      gap: 12px;
+    }
+
+    .bar-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+    }
+
+    .bar {
+      width: 100%;
+      background: linear-gradient(180deg, #00e5ff, #0077b6);
+      border-radius: 4px 4px 0 0;
+      transition: height 1s ease;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    }
+
+    .bar-label {
+      font-size: 14px;
+      color: #8ab4d8;
+      margin-top: 8px;
+    }
+
+    /* ===== 列表滚动 ===== */
+    .list {
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px dashed rgba(0, 180, 255, 0.15);
+      font-size: 16px;
+      color: #b8d8f0;
+    }
+
+    .list-item .rank {
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+      border-radius: 4px;
+      background: rgba(0, 180, 255, 0.2);
+      color: #4fc3f7;
+      font-size: 14px;
+      margin-right: 12px;
+    }
+
+    .list-item .name {
+      flex: 1;
+    }
+
+    .list-item .value {
+      color: #00e5ff;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="screen-wrapper">
+    <div id="screen">
+      <!-- 顶部 -->
+      <div class="header">
+        <h1>智慧数据可视化中心</h1>
+        <div class="time" id="clock"></div>
+      </div>
+
+      <!-- 左栏 -->
+      <div class="left-col">
+        <div class="panel">
+          <div class="panel-title">实时流量趋势</div>
+          <div class="bars">
+            <div class="bar-item">
+              <div class="bar" style="height: 60%"></div><span class="bar-label">周一</span>
+            </div>
+            <div class="bar-item">
+              <div class="bar" style="height: 85%"></div><span class="bar-label">周二</span>
+            </div>
+            <div class="bar-item">
+              <div class="bar" style="height: 45%"></div><span class="bar-label">周三</span>
+            </div>
+            <div class="bar-item">
+              <div class="bar" style="height: 95%"></div><span class="bar-label">周四</span>
+            </div>
+            <div class="bar-item">
+              <div class="bar" style="height: 70%"></div><span class="bar-label">周五</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">设备状态</div>
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="num">1,286</div>
+              <div class="label">在线设备</div>
+            </div>
+            <div class="kpi">
+              <div class="num">32</div>
+              <div class="label">离线告警</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 中栏 -->
+      <div class="center-col">
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="num">98.6%</div>
+            <div class="label">系统可用率</div>
+          </div>
+          <div class="kpi">
+            <div class="num">2,847</div>
+            <div class="label">今日请求</div>
+          </div>
+          <div class="kpi">
+            <div class="num">156ms</div>
+            <div class="label">平均响应</div>
+          </div>
+        </div>
+        <div class="panel main-chart" style="flex:1">
+          <div class="ring">
+            <div class="ring-text">
+              <div class="big">78%</div>
+              <div class="small">资源利用率</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右栏 -->
+      <div class="right-col">
+        <div class="panel">
+          <div class="panel-title">区域排行</div>
+          <div class="list">
+            <div class="list-item"><span class="rank">1</span><span class="name">华东区</span><span
+                class="value">8,432</span></div>
+            <div class="list-item"><span class="rank">2</span><span class="name">华南区</span><span
+                class="value">7,215</span></div>
+            <div class="list-item"><span class="rank">3</span><span class="name">华北区</span><span
+                class="value">6,108</span></div>
+            <div class="list-item"><span class="rank">4</span><span class="name">西南区</span><span
+                class="value">4,923</span></div>
+            <div class="list-item"><span class="rank">5</span><span class="name">东北区</span><span
+                class="value">3,567</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">告警日志</div>
+          <div class="list">
+            <div class="list-item"><span class="name">服务器 CPU 过高</span><span class="value">10:23</span></div>
+            <div class="list-item"><span class="name">网络延迟异常</span><span class="value">09:47</span></div>
+            <div class="list-item"><span class="name">数据库连接池满</span><span class="value">08:12</span></div>
+            <div class="list-item"><span class="name">磁盘空间不足</span><span class="value">07:35</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 核心：动态缩放适配 =====
+    // const DESIGN_WIDTH = 1920;
+    // const DESIGN_HEIGHT = 1080;
+
+    // function resizeScreen() {
+    //   const screen = document.getElementById('screen');
+    //   // const viewportWidth = window.innerWidth;
+    //   // const viewportHeight = window.innerHeight;
+    //   const viewportWidth = window.screen.width;
+    //   const viewportHeight = window.screen.height;
+
+
+    //   // 分别计算宽高缩放比，取较小值保证等比且不溢出
+    //   const scaleX = viewportWidth / DESIGN_WIDTH;
+    //   const scaleY = viewportHeight / DESIGN_HEIGHT;
+
+    //   const scale = Math.min(scaleX, scaleY);
+
+    //   // 应用缩放
+    //   // screen.style.transformOrigin = 'left top';
+    //   screen.style.transform = `scale(${scale})`;
+    // }
+
+    // window.addEventListener('resize', resizeScreen);
+    // resizeScreen();
+    const DESIGN_WIDTH = 1920;
+    const DESIGN_HEIGHT = 1080;
+    // 估算浏览器顶部：标题+地址栏+书签栏，默认80px，可以根据实际调整
+    const BROWSER_TOP_UI_HEIGHT = window.screen.availHeight - window.innerHeight;;
+
+    function resizeScreen() {
+      const screenDom = document.getElementById('screen');
+      const fullScreenW = window.screen.width;
+      // screen.availHeight 已经减去 Windows任务栏
+      const desktopAvailH = window.screen.availHeight;
+
+      // 再减去浏览器顶部UI的预估高度
+      const realViewH = desktopAvailH - BROWSER_TOP_UI_HEIGHT;
+      const realViewW = fullScreenW;
+
+      const scaleX = realViewW / DESIGN_WIDTH;
+      const scaleY = realViewH / DESIGN_HEIGHT;
+      const scale = Math.min(scaleX, scaleY);
+
+      // screenDom.style.transformOrigin = 'left top';
+      screenDom.style.transform = `scale(${scale})`;
+    }
+    window.addEventListener('resize', resizeScreen);
+    resizeScreen();
+
+    // const browserAllUiHeight = window.outerHeight - window.innerHeight;
+console.log('浏览器全部UI高度(标题+地址+书签+底部)：', BROWSER_TOP_UI_HEIGHT);
+
+
+    // ===== 时钟 =====
+    function updateClock() {
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      document.getElementById('clock').textContent =
+        `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+        `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // ===== 柱状图动态变化（模拟实时） =====
+    setInterval(() => {
+      document.querySelectorAll('.bar').forEach(bar => {
+        bar.style.height = (30 + Math.random() * 65) + '%';
+      });
+    }, 2000);
+  </script>
+</body>
+
+</html>
